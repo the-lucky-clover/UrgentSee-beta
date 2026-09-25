@@ -2,6 +2,8 @@ import SwiftUI
 import AudioToolbox
 
 // MARK: - Dispatch Stage
+// The dispatch pipeline's honest stage model. Progress only advances on real
+// completed work — the UI never claims more than the backend has confirmed.
 
 enum DispatchStage: String, CaseIterable {
     case idle = "IDLE"
@@ -53,7 +55,13 @@ enum DispatchStage: String, CaseIterable {
     }
 }
 
-// MARK: - Main Dispatch Console
+// MARK: - Main Dispatch Console — "Dispatch Deck" redesign
+//
+// A full reimagining of the dispatch dashboard as a mission-control deck:
+// one visual system (neon glass on void black), a task-flow layout that ends
+// in the big red button at thumb reach, and — critically — every control that
+// affects a dispatch (TTL, DND override) is visible on screen. The button
+// always tells you exactly what it will do before you press it.
 
 struct UrgentSeeDispatchConsole: View {
     @EnvironmentObject private var settings: AccessibilitySettings
@@ -62,9 +70,7 @@ struct UrgentSeeDispatchConsole: View {
     @State private var messageText: String = ""
     @State private var isCriticalOverride: Bool = true
     @State private var isDispatching: Bool = false
-    @State private var dispatchStatus: String = "IDLE"
     @State private var errorMessage: String?
-    @State private var showError: Bool = false
     @State private var showTemplateManager = false
     @State private var newTemplateName = ""
     @State private var showSaveTemplate = false
@@ -77,13 +83,13 @@ struct UrgentSeeDispatchConsole: View {
     @State private var dispatchToastColor = Color.green
     @State private var showNotice = false
     @State private var noticeMessage = ""
-    @State private var showDispatchModal = false
+    @State private var showStageTracker = false
     @State private var renameRecipient: RecipientToName?
 
     @StateObject private var apiService = APIService.shared
     @StateObject private var recipientsManager = TrustCircleManager.shared
 
-    @State private var animatedIn: [Bool] = Array(repeating: false, count: 6)
+    @State private var animatedIn: [Bool] = Array(repeating: false, count: 7)
     @FocusState private var isMessageFocused: Bool
 
     @AppStorage("messageTemplates") private var messageTemplatesData: Data = Data()
@@ -156,84 +162,140 @@ struct UrgentSeeDispatchConsole: View {
         recipientsManager.activeMembers.filter { $0.hasAppInstalled }
     }
 
+    // MARK: - Derived UI State
+
+    private var ts: Double { settings.textSize }
+
+    /// The big button only arms when a dispatch can actually fire.
+    private var isArmed: Bool {
+        apiService.isAuthenticated && selectedContact != nil && !messageText.isEmpty && !isDispatching
+    }
+
+    /// The button always says exactly why it can't fire — no dead taps.
+    private var heroLabel: String {
+        if !apiService.isAuthenticated { return "CONNECT DEVICE" }
+        if isDispatching { return dispatchStage.rawValue }
+        if selectedContact == nil { return "SELECT RECIPIENT" }
+        if messageText.isEmpty { return "TYPE MESSAGE" }
+        return "DISPATCH"
+    }
+
+    private var heroIcon: String {
+        if !apiService.isAuthenticated { return "lock.fill" }
+        if isArmed { return "paperplane.fill" }
+        return "paperplane"
+    }
+
+    private var statusText: String {
+        if !apiService.isAuthenticated { return "OFFLINE" }
+        if isDispatching { return dispatchStage.rawValue }
+        if isArmed { return "ARMED" }
+        return "IDLE"
+    }
+
+    private var statusColor: Color {
+        if !apiService.isAuthenticated { return .gray }
+        if isDispatching { return dispatchStage.color }
+        if isArmed { return .neonCyan }
+        return .neonRed
+    }
+
     // MARK: - Body
 
     var body: some View {
-        NavigationView {
-            ZStack {
-                backgroundLayers
+        ZStack {
+            backgroundLayers
 
-                ScrollView(showsIndicators: false) {
-                    mainStack
-                }
-            }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    VStack(spacing: 2) {
-                        Text("DISPATCH")
-                            .font(.system(size: settings.textSize * 0.5, weight: .black, design: .monospaced))
-                            .foregroundColor(.white)
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 14) {
+                    commandBar
+                        .deckEntrance(index: 0, animatedIn: animatedIn)
+
+                    if !apiService.isAuthenticated {
+                        authBanner
+                            .deckEntrance(index: 1, animatedIn: animatedIn)
                     }
+
+                    targetTile
+                        .deckEntrance(index: 1, animatedIn: animatedIn)
+
+                    payloadTile
+                        .deckEntrance(index: 2, animatedIn: animatedIn)
+
+                    deliveryTile
+                        .deckEntrance(index: 3, animatedIn: animatedIn)
+
+                    dispatchHero
+                        .deckEntrance(index: 4, animatedIn: animatedIn)
+
+                    if showStageTracker {
+                        stageTracker
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+
+                    // Bottom breathing room for the thumb zone.
+                    Color.clear.frame(height: 8)
+                        .deckEntrance(index: 6, animatedIn: animatedIn)
                 }
+                .padding(.horizontal, 14)
+                .padding(.top, 10)
+                .padding(.bottom, isMessageFocused ? 120 : 24)
+                .animation(.spring(response: 0.42, dampingFraction: 0.8), value: showStageTracker)
             }
-            .onAppear {
-                triggerEntranceAnimations()
-                Task { await recipientsManager.loadTrustCircle() }
-            }
-            .alert("Dispatch Failed", isPresented: $showError) {
-                Button("OK", role: .cancel) { }
-            } message: {
-                Text(errorMessage ?? "Unknown error occurred")
-            }
-            .alert("Need Attention", isPresented: $showNotice) {
-                Button("OK", role: .cancel) { }
-            } message: {
-                Text(noticeMessage)
-            }
-            .sheet(isPresented: $showTemplateManager) {
-                TemplateManagerView(
-                    templates: messageTemplates,
-                    onSave: { updated in saveTemplates(updated) },
-                    textSize: settings.textSize
-                )
-            }
-            .alert("Save as Template", isPresented: $showSaveTemplate) {
-                TextField("Template Name", text: $newTemplateName)
-                Button("Cancel", role: .cancel) { newTemplateName = "" }
-                Button("Save") { saveCurrentAsTemplate() }
-            } message: {
-                Text("Save current message as a quick template")
-            }
-            .overlay { toastOverlay }
-            .fullScreenCover(isPresented: $showDispatchModal) {
-                DispatchModalView(
-                    stage: dispatchStage,
-                    progress: dispatchProgress,
-                    textSize: settings.textSize,
-                    onDone: { dismissDispatchModal() }
-                )
-            }
-            .sheet(item: $renameRecipient) { pending in
-                NameRecipientSheet(userId: pending.id, onSave: { name in
-                    Haptics.success()
-                    recipientsManager.setDisplayName(name, for: pending.id)
-                })
-                .environmentObject(settings)
-            }
+        }
+        .onAppear {
+            triggerEntranceAnimations()
+            Task { await recipientsManager.loadTrustCircle() }
+        }
+        .alert("Need Attention", isPresented: $showNotice) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(noticeMessage)
+        }
+        .sheet(isPresented: $showTemplateManager) {
+            TemplateManagerView(
+                templates: messageTemplates,
+                onSave: { updated in saveTemplates(updated) },
+                textSize: ts
+            )
+        }
+        .alert("Save as Template", isPresented: $showSaveTemplate) {
+            TextField("Template Name", text: $newTemplateName)
+            Button("Cancel", role: .cancel) { newTemplateName = "" }
+            Button("Save") { saveCurrentAsTemplate() }
+        } message: {
+            Text("Save current message as a quick template")
+        }
+        .overlay { toastOverlay }
+        .sheet(item: $renameRecipient) { pending in
+            NameRecipientSheet(userId: pending.id, onSave: { name in
+                Haptics.success()
+                recipientsManager.setDisplayName(name, for: pending.id)
+            })
+            .environmentObject(settings)
         }
     }
 
     // MARK: - Root Subviews
 
     @ViewBuilder private var backgroundLayers: some View {
-        Color.black.ignoresSafeArea()
+        Color.voidBlack.ignoresSafeArea()
 
+        // Red command glow from the top — the deck's light source.
         RadialGradient(
-            colors: [Color.red.opacity(0.18), Color.orange.opacity(0.06), Color.black],
+            colors: [Color.neonRed.opacity(0.16), Color.neonPink.opacity(0.05), Color.clear],
             center: .top,
             startRadius: 10,
-            endRadius: 600
+            endRadius: 620
+        )
+        .ignoresSafeArea()
+
+        // Faint cyan underglow so the deck feels deep, not flat.
+        RadialGradient(
+            colors: [Color.neonCyan.opacity(0.05), Color.clear],
+            center: .bottom,
+            startRadius: 40,
+            endRadius: 700
         )
         .ignoresSafeArea()
 
@@ -243,108 +305,96 @@ struct UrgentSeeDispatchConsole: View {
             .allowsHitTesting(true)
     }
 
-    @ViewBuilder private var mainStack: some View {
-        VStack(spacing: 14) {
-            headerSection
-            recipientSection
-            templatesSection
-            payloadSection
-            dispatchButtonSection
-            if !apiService.isAuthenticated {
-                authBannerSection
-            }
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 18)
-        .padding(.bottom, isMessageFocused ? 120 : 20)
-    }
+    // MARK: - Command Bar
 
-    @ViewBuilder private var toastOverlay: some View {
-        if showDispatchToast {
-            VStack {
-                Spacer()
-                DispatchToast(
-                    message: dispatchToastMessage,
-                    icon: dispatchToastIcon,
-                    color: dispatchToastColor,
-                    textSize: settings.textSize,
-                    onDismiss: { showDispatchToast = false }
-                )
-                .padding(.horizontal, 16)
-                .padding(.bottom, 100)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-                .animation(.spring(response: 0.4, dampingFraction: 0.7), value: showDispatchToast)
-            }
-        }
-    }
+    @ViewBuilder private var commandBar: some View {
+        HStack(spacing: 10) {
+            ShimmeringPhoneIcon(size: ts * 0.72)
 
-    // MARK: - Header
-
-    @ViewBuilder private var headerSection: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 8) {
-                    // Red phone app icon replaces the old suitcase glyph.
-                    ShimmeringPhoneIcon(size: settings.textSize * 0.75)
-                    Text("UrgentSee")
-                        .font(.system(size: settings.textSize * 0.9, weight: .black, design: .monospaced))
-                        .foregroundColor(.white)
-                }
-            }
+            Text("URGENTSEE")
+                .font(.system(size: ts * 0.82, weight: .black, design: .monospaced))
+                .foregroundColor(.white)
 
             Spacer()
 
-            Text(dispatchStatus)
-                .font(.system(size: settings.textSize * 0.35, weight: .bold, design: .monospaced))
-                .padding(.horizontal, settings.textSize * 0.35)
-                .padding(.vertical, settings.textSize * 0.2)
-                .background(Color.red.opacity(0.2))
-                .foregroundColor(.red)
-                .cornerRadius(6)
-                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.red.opacity(0.4), lineWidth: 1))
+            // Live status readout — the single source of truth for deck state.
+            HStack(spacing: 7) {
+                Circle()
+                    .fill(statusColor)
+                    .frame(width: 8, height: 8)
+                    .shadow(color: statusColor.opacity(0.9), radius: 6)
+
+                Text(statusText)
+                    .font(.system(size: ts * 0.32, weight: .black, design: .monospaced))
+                    .foregroundColor(statusColor)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 11)
+            .padding(.vertical, 7)
+            .background(statusColor.opacity(0.1))
+            .cornerRadius(9)
+            .overlay(
+                RoundedRectangle(cornerRadius: 9)
+                    .stroke(statusColor.opacity(0.35), lineWidth: 1)
+            )
+            .animation(.easeInOut(duration: 0.25), value: statusText)
         }
         .padding(.horizontal, 4)
-        .opacity(animatedIn[0] ? 1 : 0)
-        .offset(y: animatedIn[0] ? 0 : -20)
+        .padding(.vertical, 2)
     }
 
-    // MARK: - Target Recipient
+    // MARK: - Auth Banner (top, not buried — auth gates everything)
 
-    @ViewBuilder private var recipientSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+    @ViewBuilder private var authBanner: some View {
+        HStack(spacing: 11) {
+            Image(systemName: "lock.shield.fill")
+                .font(.system(size: ts * 0.62, weight: .bold))
+                .foregroundColor(.orange)
+                .shadow(color: .orange.opacity(0.5), radius: 8)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("DEVICE NOT CONNECTED")
+                    .font(.system(size: ts * 0.38, weight: .black, design: .monospaced))
+                    .foregroundColor(.orange)
+                Text("Recipients tab → gear → Connect This Device")
+                    .font(.system(size: ts * 0.32))
+                    .foregroundColor(.gray)
+            }
+
+            Spacer()
+        }
+        .padding(13)
+        .glassmorphicBento(glowColor: .orange, cornerRadius: 16)
+    }
+
+    // MARK: - Target Tile
+
+    @ViewBuilder private var targetTile: some View {
+        VStack(alignment: .leading, spacing: 11) {
             HStack {
-                Text("TARGET RECIPIENT")
-                    .font(.system(size: settings.textSize * 0.35, weight: .bold, design: .monospaced))
-                    .foregroundColor(.red)
-
+                TileLabel("TARGET", color: .neonRed, textSize: ts)
                 Spacer()
-
-                if !activeContacts.isEmpty {
-                    let count = activeContacts.count
-                    let availableText = "\(count) available"
-                    Text(availableText)
-                        .font(.system(size: settings.textSize * 0.3))
-                        .foregroundColor(.gray)
-                }
+                Text("\(activeContacts.count) AVAILABLE")
+                    .font(.system(size: ts * 0.28, weight: .bold, design: .monospaced))
+                    .foregroundColor(.gray)
             }
 
             if activeContacts.isEmpty {
-                Text("No Recipients with app installed. Add in Recipients tab.")
-                    .font(.system(size: settings.textSize * 0.45))
+                Text("No recipients with the app installed yet.\nAdd one in the Recipients tab to arm the deck.")
+                    .font(.system(size: ts * 0.4))
                     .foregroundColor(.gray)
-                    .padding(.vertical, 12)
+                    .padding(.vertical, 8)
             } else {
-                let contacts = activeContacts
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(contacts) { contact in
-                            let isSelected = selectedContact?.id == contact.id
-                            RecipientPill(
+                    HStack(spacing: 10) {
+                        ForEach(activeContacts) { contact in
+                            RecipientCard(
                                 contact: contact,
-                                isSelected: isSelected,
-                                textSize: settings.textSize,
-                                onTap: { onRecipientSelected(contact) }
-                            )
+                                isSelected: selectedContact?.id == contact.id,
+                                textSize: ts
+                            ) {
+                                onRecipientSelected(contact)
+                            }
                             .contextMenu {
                                 Button {
                                     renameRecipient = RecipientToName(id: contact.userId)
@@ -355,222 +405,390 @@ struct UrgentSeeDispatchConsole: View {
                         }
                     }
                     .padding(.horizontal, 2)
+                    .padding(.vertical, 2)
                 }
             }
         }
-        .glassmorphicBento(glowColor: .red)
-        .opacity(animatedIn[1] ? 1 : 0)
-        .scaleEffect(animatedIn[1] ? 1 : 0.9)
-        .offset(y: animatedIn[1] ? 0 : 30)
+        .padding(14)
+        .glassmorphicBento(glowColor: .neonRed, cornerRadius: 20)
     }
 
-    // MARK: - Quick Messages
+    // MARK: - Payload Tile
 
-    @ViewBuilder private var templatesSection: some View {
-        if !messageTemplates.isEmpty {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text("QUICK MESSAGES")
-                        .font(.system(size: settings.textSize * 0.35, weight: .bold, design: .monospaced))
-                        .foregroundColor(.blue)
+    @ViewBuilder private var payloadTile: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            HStack {
+                TileLabel("PAYLOAD", color: .neonCyan, textSize: ts)
+                Spacer()
+                charRing
+            }
 
-                    Spacer()
-
-                    Button(action: { showTemplateManager = true }) {
-                        Image(systemName: "gearshape.fill")
-                            .font(.system(size: settings.textSize * 0.5))
-                            .foregroundColor(.gray)
-                    }
-                }
-
-                let templates = messageTemplates.filter { !$0.text.isEmpty }
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(templates) { template in
-                            let isSelected = messageText == template.text
-                            TemplateButton(
-                                template: template,
-                                isSelected: isSelected,
-                                textSize: settings.textSize,
-                                onTap: { applyTemplate(template) }
-                            )
+            // Quick-message chips live with the composer — one section, no
+            // layout shift when the template list is empty.
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(messageTemplates.filter { !$0.text.isEmpty }) { template in
+                        TemplateChip(
+                            template: template,
+                            isSelected: messageText == template.text,
+                            textSize: ts
+                        ) {
+                            applyTemplate(template)
                         }
                     }
-                    .padding(.horizontal, 2)
+
+                    Button(action: {
+                        if messageText.isEmpty {
+                            showTemplateManager = true
+                        } else {
+                            newTemplateName = ""
+                            showSaveTemplate = true
+                        }
+                    }) {
+                        HStack(spacing: 5) {
+                            Image(systemName: messageText.isEmpty ? "gearshape.fill" : "plus")
+                                .font(.system(size: ts * 0.32, weight: .bold))
+                            Text(messageText.isEmpty ? "MANAGE" : "SAVE")
+                                .font(.system(size: ts * 0.32, weight: .black, design: .monospaced))
+                        }
+                        .foregroundColor(.gray)
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 8)
+                        .background(Color.white.opacity(0.05))
+                        .cornerRadius(9)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 9)
+                                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
                 }
-            }
-            .glassmorphicBento(glowColor: .blue)
-            .opacity(animatedIn[2] ? 1 : 0)
-            .scaleEffect(animatedIn[2] ? 1 : 0.9)
-            .offset(y: animatedIn[2] ? 0 : 40)
-        }
-    }
-
-    // MARK: - Message Payload
-
-    @ViewBuilder private var payloadSection: some View {
-        let charCount = messageText.count
-        let limit = maxCharacters
-        let isOverLimit = charCount > limit
-        let isNearLimit = charCount > limit * 8 / 10 && !isOverLimit
-        let countColor: Color = isOverLimit ? .red : (isNearLimit ? .orange : .gray)
-
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text("FRONT & CENTER PAYLOAD")
-                    .font(.system(size: settings.textSize * 0.35, weight: .bold, design: .monospaced))
-                    .foregroundColor(.red)
-
-                Spacer()
-
-                Text("\(charCount)/\(limit)")
-                    .font(.system(size: settings.textSize * 0.35, weight: .bold, design: .monospaced))
-                    .foregroundColor(countColor)
+                .padding(.horizontal, 2)
             }
 
             ZStack(alignment: .topLeading) {
                 if messageText.isEmpty {
-                    let hasContact = selectedContact != nil
-                    let hintText = hasContact
-                        ? "Message for " + recipientsManager.displayName(for: selectedContact!.userId) + "..."
-                        : "Select a recipient first..."
-                    Text(hintText)
-                        .font(.system(size: settings.textSize * 0.55))
-                        .foregroundColor(.gray.opacity(0.5))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 10)
+                    Text(selectedContact != nil
+                         ? "Message for \(recipientsManager.displayName(for: selectedContact!.userId))…"
+                         : "Select a target first…")
+                        .font(.system(size: ts * 0.55, design: .rounded))
+                        .foregroundColor(.gray.opacity(0.45))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 13)
                 }
 
                 TextEditor(text: $messageText)
                     .focused($isMessageFocused)
-                    .frame(height: settings.textSize * 4)
+                    .frame(height: ts * 3.6)
                     .scrollContentBackground(.hidden)
-                    .padding(8)
+                    .padding(10)
                     .foregroundColor(.white)
-                    .font(.system(size: settings.textSize * 0.6, weight: .bold, design: .rounded))
-                    .onChange(of: messageText) { newValue in
-                        let exceedsLimit = newValue.count > maxCharacters
-                        if exceedsLimit {
-                            let truncated = newValue.prefix(maxCharacters)
-                            messageText = String(truncated)
+                    .font(.system(size: ts * 0.58, weight: .semibold, design: .rounded))
+                    .onChange(of: messageText) { _ in
+                        if messageText.count > maxCharacters {
+                            messageText = String(messageText.prefix(maxCharacters))
                         }
                         if let contact = selectedContact {
-                            saveRecipientMessage(newValue, for: contact.userId)
+                            saveRecipientMessage(messageText, for: contact.userId)
                         }
                     }
                     .toolbar {
                         ToolbarItemGroup(placement: .keyboard) {
                             Spacer()
                             Button("Done") { dismissKeyboard() }
-                                .font(.system(size: settings.textSize * 0.45, weight: .semibold))
-                                .foregroundColor(.red)
+                                .font(.system(size: ts * 0.45, weight: .semibold))
+                                .foregroundColor(.neonRed)
                         }
                     }
             }
             .background(Color.white.opacity(0.03))
-            .cornerRadius(12)
-            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.red.opacity(0.3), lineWidth: 1))
+            .cornerRadius(14)
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(Color.neonCyan.opacity(isMessageFocused ? 0.6 : 0.25), lineWidth: 1.5)
+                    .animation(.easeInOut(duration: 0.2), value: isMessageFocused)
+            )
         }
-        .glassmorphicBento(glowColor: .orange)
-        .opacity(animatedIn[3] ? 1 : 0)
-        .scaleEffect(animatedIn[3] ? 1 : 0.9)
-        .offset(y: animatedIn[3] ? 0 : 50)
+        .padding(14)
+        .glassmorphicBento(glowColor: .neonCyan, cornerRadius: 20)
     }
 
-    // MARK: - Dispatch Button
+    @ViewBuilder private var charRing: some View {
+        let count = messageText.count
+        let ratio = min(Double(count) / Double(maxCharacters), 1.0)
+        let ringColor: Color = count >= maxCharacters ? .neonRed
+            : (count > maxCharacters * 8 / 10 ? .orange : .gray)
 
-    @ViewBuilder private var dispatchButtonSection: some View {
-        let isReady = selectedContact != nil && !messageText.isEmpty && apiService.isAuthenticated && !isDispatching
-        let nearLimit = messageText.count > Int(Double(maxCharacters) * 0.9)
+        HStack(spacing: 8) {
+            Text("\(count)/\(maxCharacters)")
+                .font(.system(size: ts * 0.3, weight: .bold, design: .monospaced))
+                .foregroundColor(ringColor)
+                .monospacedDigit()
 
-        Button(action: executeDispatch) {
-            HStack(spacing: 10) {
-                if isDispatching {
-                    ProgressView()
-                        .tint(.white)
-                } else {
-                    Image(systemName: "paperplane.fill")
-                        .font(.system(size: settings.textSize * 0.75, weight: .bold))
-                    Text("SEND MESSAGE")
-                        .font(.system(size: settings.textSize * 0.6, weight: .black, design: .monospaced))
+            ZStack {
+                Circle()
+                    .stroke(Color.white.opacity(0.12), lineWidth: 4)
+                    .frame(width: 26, height: 26)
+                Circle()
+                    .trim(from: 0, to: ratio)
+                    .stroke(ringColor, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                    .frame(width: 26, height: 26)
+                    .rotationEffect(.degrees(-90))
+                    .animation(.easeOut(duration: 0.2), value: ratio)
+            }
+        }
+    }
+
+    // MARK: - Delivery Tile (TTL + Override — previously invisible on iOS)
+
+    @ViewBuilder private var deliveryTile: some View {
+        HStack(alignment: .top, spacing: 12) {
+            // TTL — every option that affects the dispatch, on screen.
+            VStack(alignment: .leading, spacing: 9) {
+                TileLabel("TTL", color: .neonAmber, textSize: ts)
+
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 5), spacing: 6) {
+                    ForEach(ttlOptions) { option in
+                        let isSelected = selectedTTL == option
+                        Button(action: {
+                            Haptics.medium()
+                            selectedTTL = option
+                        }) {
+                            Text(option.label)
+                                .font(.system(size: ts * 0.32, weight: .black, design: .monospaced))
+                                .foregroundColor(isSelected ? .white : .gray)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 8)
+                                .background(isSelected ? Color.neonAmber : Color.white.opacity(0.05))
+                                .cornerRadius(8)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(isSelected ? Color.neonAmber : Color.white.opacity(0.1), lineWidth: 1.5)
+                                )
+                                .shadow(color: isSelected ? .neonAmber.opacity(0.4) : .clear, radius: 6)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isDispatching)
+                    }
                 }
+
+                Text(selectedTTL.isUntilReceived ? "Retries until read" : "Expires after \(selectedTTL.label)")
+                    .font(.system(size: ts * 0.27, design: .monospaced))
+                    .foregroundColor(.gray)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, settings.textSize * 0.7)
-            .background(
-                LinearGradient(
-                    colors: [.red, Color.orange],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-            )
-            .foregroundColor(.white)
-            .cornerRadius(18)
-            .shadow(color: Color.red.opacity(0.6), radius: 18, x: 0, y: 6)
-        }
-        .disabled(isDispatching)
-        .opacity((isReady ? 1.0 : 0.55))
-        .opacity(animatedIn[5] ? 1 : 0)
-        .scaleEffect(animatedIn[5] ? 1 : 0.9)
-        .offset(y: animatedIn[5] ? 0 : 70)
-        .overlay {
-            if nearLimit && !messageText.isEmpty && !isDispatching {
-                VStack {
-                    Spacer()
-                    HStack {
-                        Spacer()
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundColor(.orange)
-                        Text("Approaching character limit")
-                            .font(.system(size: settings.textSize * 0.3, weight: .medium))
-                            .foregroundColor(.orange)
-                        Spacer()
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(Color.black.opacity(0.8))
-                    .cornerRadius(8)
-                    .padding(.bottom, settings.textSize * 2)
+
+            RoundedRectangle(cornerRadius: 1)
+                .fill(Color.white.opacity(0.08))
+                .frame(width: 1)
+
+            // DND override — visible, honest, reversible.
+            VStack(alignment: .leading, spacing: 9) {
+                TileLabel("OVERRIDE", color: .neonAmber, textSize: ts)
+
+                HStack(spacing: 8) {
+                    Image(systemName: isCriticalOverride ? "bell.fill" : "bell.slash.fill")
+                        .font(.system(size: ts * 0.5, weight: .bold))
+                        .foregroundColor(isCriticalOverride ? .neonRed : .gray)
+                        .shadow(color: isCriticalOverride ? .neonRed.opacity(0.6) : .clear, radius: 6)
+                    Text("DND\nOVERRIDE")
+                        .font(.system(size: ts * 0.32, weight: .black, design: .monospaced))
+                        .foregroundColor(isCriticalOverride ? .white : .gray)
                 }
+
+                Button(action: {
+                    Haptics.medium()
+                    isCriticalOverride.toggle()
+                }) {
+                    ZStack(alignment: isCriticalOverride ? .trailing : .leading) {
+                        Capsule()
+                            .fill(isCriticalOverride ? Color.neonRed : Color.white.opacity(0.12))
+                            .frame(width: 54, height: 31)
+                            .shadow(color: isCriticalOverride ? .neonRed.opacity(0.5) : .clear, radius: 8)
+                        Circle()
+                            .fill(Color.white)
+                            .frame(width: 25, height: 25)
+                            .padding(3)
+                            .shadow(radius: 2)
+                    }
+                    .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isCriticalOverride)
+                }
+                .buttonStyle(.plain)
+                .disabled(isDispatching)
+                .accessibilityLabel("Do Not Disturb override")
+
+                Text(isCriticalOverride
+                     ? "Bypasses Do Not Disturb on their device."
+                     : "Respects Do Not Disturb.")
+                    .font(.system(size: ts * 0.27))
+                    .foregroundColor(.gray)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .padding(14)
+        .glassmorphicBento(glowColor: .neonAmber, cornerRadius: 20)
+    }
+
+    // MARK: - Dispatch Hero
+
+    @ViewBuilder private var dispatchHero: some View {
+        VStack(spacing: 10) {
+            Button(action: executeDispatch) {
+                HStack(spacing: 11) {
+                    if isDispatching {
+                        ProgressView()
+                            .tint(.white)
+                    } else {
+                        Image(systemName: heroIcon)
+                            .font(.system(size: ts * 0.68, weight: .bold))
+                    }
+                    Text(heroLabel)
+                        .font(.system(size: ts * 0.6, weight: .black, design: .monospaced))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, ts * 0.72)
+                .background(
+                    LinearGradient(
+                        colors: isArmed
+                            ? [Color.neonRed, Color.orange]
+                            : [Color.white.opacity(0.09), Color.white.opacity(0.04)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .foregroundColor(.white)
+                .cornerRadius(20)
+                .shadow(color: isArmed ? .neonRed.opacity(0.55) : .clear, radius: 18, x: 0, y: 6)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20)
+                        .stroke(isArmed ? Color.white.opacity(0.35) : Color.white.opacity(0.1), lineWidth: 1.5)
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(!isArmed)
+            .breathe(active: isArmed, color: .neonRed)
+
+            // What happens when you press it. No surprises.
+            summaryStrip
+        }
+    }
+
+    @ViewBuilder private var summaryStrip: some View {
+        HStack(spacing: 0) {
+            summarySegment(
+                label: "TO",
+                value: selectedContact.map { recipientsManager.displayName(for: $0.userId) } ?? "—",
+                state: selectedContact == nil ? .missing : .ok
+            )
+            summaryDivider
+            summarySegment(label: "TTL", value: selectedTTL.label, state: .ok)
+            summaryDivider
+            summarySegment(
+                label: "OVERRIDE",
+                value: isCriticalOverride ? "ON" : "OFF",
+                state: isCriticalOverride ? .warn : .ok
+            )
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(Color.white.opacity(0.03))
+        .cornerRadius(13)
+        .overlay(
+            RoundedRectangle(cornerRadius: 13)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        )
+        .animation(.easeInOut(duration: 0.2), value: selectedContact?.id)
+        .animation(.easeInOut(duration: 0.2), value: selectedTTL)
+        .animation(.easeInOut(duration: 0.2), value: isCriticalOverride)
+    }
+
+    private enum SummaryState { case ok, missing, warn }
+
+    @ViewBuilder private func summarySegment(label: String, value: String, state: SummaryState) -> some View {
+        VStack(spacing: 3) {
+            Text(label)
+                .font(.system(size: ts * 0.25, weight: .black, design: .monospaced))
+                .foregroundColor(.gray)
+            Text(value)
+                .font(.system(size: ts * 0.33, weight: .bold, design: .monospaced))
+                .foregroundColor(state == .missing ? .orange : (state == .warn ? .neonRed : .white))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var summaryDivider: some View {
+        RoundedRectangle(cornerRadius: 1)
+            .fill(Color.white.opacity(0.1))
+            .frame(width: 1, height: 26)
+    }
+
+    // MARK: - Stage Tracker (inline — replaces the full-screen modal)
+
+    @ViewBuilder private var stageTracker: some View {
+        VStack(spacing: 4) {
+            if dispatchStage == .failed {
+                HStack(spacing: 11) {
+                    Image(systemName: "xmark.octagon.fill")
+                        .font(.system(size: ts * 0.62, weight: .bold))
+                        .foregroundColor(.neonRed)
+                        .shadow(color: .neonRed.opacity(0.6), radius: 8)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("DISPATCH FAILED")
+                            .font(.system(size: ts * 0.4, weight: .black, design: .monospaced))
+                            .foregroundColor(.neonRed)
+                        Text(errorMessage ?? "Unknown error occurred")
+                            .font(.system(size: ts * 0.32))
+                            .foregroundColor(.gray)
+                            .lineLimit(2)
+                    }
+
+                    Spacer()
+
+                    Button(action: executeDispatch) {
+                        Text("RETRY")
+                            .font(.system(size: ts * 0.36, weight: .black, design: .monospaced))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 15)
+                            .padding(.vertical, 11)
+                            .background(Color.neonRed)
+                            .cornerRadius(11)
+                            .shadow(color: .neonRed.opacity(0.5), radius: 10)
+                    }
+                    .buttonStyle(.plain)
+                }
+            } else {
+                StagePipelineView(stage: dispatchStage, progress: dispatchProgress, textSize: ts)
             }
         }
+        .padding(14)
+        .glassmorphicBento(glowColor: dispatchStage.color, cornerRadius: 20)
     }
 
-    // MARK: - Progress + Auth
+    // MARK: - Toast
 
-    @ViewBuilder private var progressSection: some View {
-        DispatchProgressView(
-            stage: dispatchStage,
-            progress: dispatchProgress,
-            textSize: settings.textSize
-        )
-        .opacity(animatedIn[5] ? 1 : 0)
-        .scaleEffect(animatedIn[5] ? 1 : 0.9)
-        .offset(y: animatedIn[5] ? 0 : 70)
-        .transition(.asymmetric(
-            insertion: .move(edge: .bottom).combined(with: .opacity),
-            removal: .move(edge: .bottom).combined(with: .opacity)
-        ))
-        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: dispatchStage)
-    }
-
-    @ViewBuilder private var authBannerSection: some View {
-        VStack(spacing: 6) {
-            Image(systemName: "lock.shield")
-                .font(.system(size: settings.textSize * 0.75))
-                .foregroundColor(.orange)
-            Text("Authentication Required")
-                .font(.system(size: settings.textSize * 0.45, weight: .bold, design: .monospaced))
-                .foregroundColor(.orange)
-            Text("Go to Recipients tab to connect your account")
-                .font(.system(size: settings.textSize * 0.35))
-                .foregroundColor(.gray)
-                .multilineTextAlignment(.center)
+    @ViewBuilder private var toastOverlay: some View {
+        if showDispatchToast {
+            VStack {
+                Spacer()
+                DispatchToast(
+                    message: dispatchToastMessage,
+                    icon: dispatchToastIcon,
+                    color: dispatchToastColor,
+                    textSize: ts,
+                    onDismiss: { showDispatchToast = false }
+                )
+                .padding(.horizontal, 16)
+                .padding(.bottom, 100)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .animation(.spring(response: 0.4, dampingFraction: 0.7), value: showDispatchToast)
+            }
         }
-        .glassmorphicBento(glowColor: .orange)
-        .opacity(animatedIn[5] ? 1 : 0)
-        .scaleEffect(animatedIn[5] ? 1 : 0.9)
-        .offset(y: animatedIn[5] ? 0 : 70)
     }
 
     // MARK: - Helpers
@@ -627,8 +845,8 @@ struct UrgentSeeDispatchConsole: View {
 
     private func triggerEntranceAnimations() {
         for index in 0..<animatedIn.count {
-            DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.1) {
-                withAnimation(.spring(response: 0.5, dampingFraction: 0.72)) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.09) {
+                withAnimation(.spring(response: 0.55, dampingFraction: 0.72)) {
                     animatedIn[index] = true
                 }
             }
@@ -659,9 +877,8 @@ struct UrgentSeeDispatchConsole: View {
         dispatchStage = .validating
         dispatchProgress = 0.0
         errorMessage = nil
-        showError = false
         showDispatchToast = false
-        showDispatchModal = true
+        showStageTracker = true
 
         let ttlMinutes = selectedTTL == .untilReceived ? 10080 : selectedTTL.minutes
         let isUntilReceived = selectedTTL == .untilReceived
@@ -710,44 +927,37 @@ struct UrgentSeeDispatchConsole: View {
                     Haptics.success()
                     showDeliveryToast(confirmations)
                     DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
-                        dismissDispatchModal()
+                        dismissStageTracker()
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                             dispatchStage = .idle
                             dispatchProgress = 0.0
-                            dispatchStatus = "IDLE"
                         }
                     }
                 }
             } catch let apiError as APIError {
                 await MainActor.run {
-                    isDispatching = false
-                    dispatchStage = .failed
-                    dispatchProgress = 0.0
-                    errorMessage = apiError.localizedDescription
-                    showError = true
-                    showFailureToast(apiError.localizedDescription)
-                    dismissDispatchModal()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-                        dispatchStage = .idle
-                        dispatchStatus = "IDLE"
-                        showError = false
-                    }
+                    handleDispatchFailure(apiError.localizedDescription)
                 }
             } catch {
                 await MainActor.run {
-                    isDispatching = false
-                    dispatchStage = .failed
-                    dispatchProgress = 0.0
-                    errorMessage = error.localizedDescription
-                    showError = true
-                    showFailureToast(error.localizedDescription)
-                    dismissDispatchModal()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-                        dispatchStage = .idle
-                        dispatchStatus = "IDLE"
-                        showError = false
-                    }
+                    handleDispatchFailure(error.localizedDescription)
                 }
+            }
+        }
+    }
+
+    /// Failure keeps the tracker on screen with the real error and a retry —
+    /// no blocking alert, no dead end. Auto-resets only if untouched.
+    private func handleDispatchFailure(_ description: String) {
+        isDispatching = false
+        dispatchStage = .failed
+        dispatchProgress = 0.0
+        errorMessage = description
+        showFailureToast(description)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8.0) {
+            if dispatchStage == .failed {
+                showStageTracker = false
+                dispatchStage = .idle
             }
         }
     }
@@ -756,7 +966,7 @@ struct UrgentSeeDispatchConsole: View {
     // backend's confirmed dispatch status. Nothing is assumed about APNs
     // delivery beyond what the server reported.
     private func checkDeliveryConfirmations(_ contact: TrustCircleManager.TrustCircleMember, serverStatus: String) -> [String] {
-        var confirmations: [String] = []
+        var confirmations = [String]()
         if contact.hasAppInstalled {
             confirmations.append("✅ Recipient in trust circle & active")
         } else {
@@ -798,8 +1008,8 @@ struct UrgentSeeDispatchConsole: View {
         AudioServicesPlaySystemSound(1006)
     }
 
-    private func dismissDispatchModal() {
-        showDispatchModal = false
+    private func dismissStageTracker() {
+        showStageTracker = false
         isDispatching = false
     }
 }
@@ -818,7 +1028,36 @@ struct MessageTemplate: Identifiable, Codable {
     }
 }
 
-struct RecipientPill: View {
+// MARK: - Deck Tiles
+
+/// Small mono label with an accent bar — the deck's section header.
+struct TileLabel: View {
+    let text: String
+    let color: Color
+    let textSize: Double
+
+    init(_ text: String, color: Color, textSize: Double) {
+        self.text = text
+        self.color = color
+        self.textSize = textSize
+    }
+
+    var body: some View {
+        HStack(spacing: 7) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(color)
+                .frame(width: 4, height: 15)
+                .shadow(color: color.opacity(0.7), radius: 4)
+            Text(text)
+                .font(.system(size: textSize * 0.36, weight: .black, design: .monospaced))
+                .foregroundColor(color)
+        }
+    }
+}
+
+/// Recipient target card — presence, name, last-seen, and a selection state
+/// that reads at a glance.
+struct RecipientCard: View {
     let contact: TrustCircleManager.TrustCircleMember
     let isSelected: Bool
     let textSize: Double
@@ -826,46 +1065,50 @@ struct RecipientPill: View {
 
     var body: some View {
         Button(action: onTap) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 5) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 7) {
                     Circle()
-                        .fill(contact.hasAppInstalled ? Color.green : Color.gray)
-                        .frame(width: textSize * 0.25, height: textSize * 0.25)
+                        .fill(contact.hasAppInstalled ? Color.neonGreen : Color.gray)
+                        .frame(width: textSize * 0.28, height: textSize * 0.28)
+                        .shadow(color: contact.hasAppInstalled ? .neonGreen.opacity(0.8) : .clear, radius: 5)
 
                     Text(TrustCircleManager.shared.displayName(for: contact.userId))
-                        .font(.system(size: textSize * 0.5, weight: .bold))
+                        .font(.system(size: textSize * 0.52, weight: .bold))
                         .foregroundColor(.white)
-
-                    if !contact.hasAppInstalled {
-                        Image(systemName: "iphone.slash")
-                            .foregroundColor(.orange)
-                            .font(.system(size: textSize * 0.3))
-                    }
+                        .lineLimit(1)
                 }
 
                 if let lastSeen = contact.lastSeenText {
                     Text(lastSeen)
-                        .font(.system(size: textSize * 0.28))
+                        .font(.system(size: textSize * 0.29, design: .monospaced))
                         .foregroundColor(.gray)
                 }
+
+                Text(isSelected ? "TARGET LOCKED" : "TAP TO TARGET")
+                    .font(.system(size: textSize * 0.25, weight: .black, design: .monospaced))
+                    .foregroundColor(isSelected ? .neonRed : .gray.opacity(0.55))
             }
-            .padding(.horizontal, textSize * 0.5)
-            .padding(.vertical, textSize * 0.35)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .frame(minWidth: textSize * 3.6, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(isSelected ? Color.red.opacity(0.3) : Color.white.opacity(0.04))
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(isSelected ? Color.neonRed.opacity(0.16) : Color.white.opacity(0.04))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(isSelected ? Color.red : Color.white.opacity(0.1), lineWidth: 1.5)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(isSelected ? Color.neonRed : Color.white.opacity(0.1), lineWidth: isSelected ? 2 : 1)
             )
-            .opacity(contact.hasAppInstalled ? 1.0 : 0.6)
+            .shadow(color: isSelected ? .neonRed.opacity(0.35) : .clear, radius: 10)
+            .scaleEffect(isSelected ? 1.02 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
         }
-        .disabled(!contact.hasAppInstalled)
+        .buttonStyle(.plain)
     }
 }
 
-struct TemplateButton: View {
+/// Quick-message chip — cyan accent, part of the payload tile.
+struct TemplateChip: View {
     let template: MessageTemplate
     let isSelected: Bool
     let textSize: Double
@@ -874,19 +1117,134 @@ struct TemplateButton: View {
     var body: some View {
         Button(action: onTap) {
             Text(template.name)
-                .font(.system(size: textSize * 0.4, weight: .bold, design: .monospaced))
-                .padding(.horizontal, textSize * 0.4)
-                .padding(.vertical, textSize * 0.25)
-                .background(isSelected ? Color.blue : Color.white.opacity(0.05))
-                .foregroundColor(isSelected ? .white : .gray)
-                .cornerRadius(8)
+                .font(.system(size: textSize * 0.35, weight: .black, design: .monospaced))
+                .foregroundColor(isSelected ? .white : .neonCyan.opacity(0.9))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(isSelected ? Color.neonCyan.opacity(0.85) : Color.neonCyan.opacity(0.08))
+                .cornerRadius(9)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(isSelected ? Color.blue : Color.clear, lineWidth: 1.5)
+                    RoundedRectangle(cornerRadius: 9)
+                        .stroke(Color.neonCyan.opacity(isSelected ? 0.9 : 0.3), lineWidth: 1.5)
                 )
+                .shadow(color: isSelected ? .neonCyan.opacity(0.4) : .clear, radius: 8)
         }
+        .buttonStyle(.plain)
     }
 }
+
+// MARK: - Inline Stage Pipeline
+// Replaces the old full-screen DispatchModalView / DispatchProgressView: the
+// pipeline stays on the deck, in flow, with a retry on failure.
+
+struct StagePipelineView: View {
+    let stage: DispatchStage
+    let progress: Double
+    let textSize: Double
+
+    private let nodes: [(label: String, stages: [DispatchStage])] = [
+        ("ENCRYPT", [.validating, .encrypting]),
+        ("TRANSMIT", [.dispatching]),
+        ("PUSH", [.pushing]),
+        ("LOCK", [.mounted]),
+        ("READ", [.confirmed]),
+    ]
+
+    private var activeIndex: Int {
+        nodes.firstIndex(where: { $0.stages.contains(stage) }) ?? -1
+    }
+
+    var body: some View {
+        VStack(spacing: 11) {
+            HStack(spacing: 2) {
+                ForEach(0..<nodes.count, id: \.self) { i in
+                    nodeView(index: i)
+                    if i < nodes.count - 1 {
+                        connectorView(index: i)
+                    }
+                }
+            }
+
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color.white.opacity(0.1))
+                        .frame(height: 6)
+
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(
+                            LinearGradient(
+                                colors: [stage.color, stage.color.opacity(0.6)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .frame(width: geometry.size.width * progress, height: 6)
+                        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: progress)
+                }
+            }
+            .frame(height: 6)
+
+            HStack(spacing: 8) {
+                Image(systemName: stage.icon)
+                    .font(.system(size: textSize * 0.45, weight: .bold))
+                    .foregroundColor(stage.color)
+                    .shadow(color: stage.color.opacity(0.6), radius: 6)
+
+                Text(stage.rawValue)
+                    .font(.system(size: textSize * 0.36, weight: .black, design: .monospaced))
+                    .foregroundColor(stage.color)
+                    .lineLimit(1)
+
+                Spacer()
+
+                Text("\(Int(progress * 100))%")
+                    .font(.system(size: textSize * 0.32, weight: .bold, design: .monospaced))
+                    .foregroundColor(.gray)
+                    .monospacedDigit()
+            }
+        }
+    }
+
+    @ViewBuilder private func nodeView(index: Int) -> some View {
+        let done = stage == .confirmed || index < activeIndex
+        let active = index == activeIndex
+        let ringColor = done ? Color.neonGreen : (active ? stage.color : Color.white.opacity(0.15))
+
+        VStack(spacing: 5) {
+            ZStack {
+                Circle()
+                    .fill(done ? Color.neonGreen.opacity(0.18)
+                          : (active ? stage.color.opacity(0.22) : Color.white.opacity(0.05)))
+                    .frame(width: 36, height: 36)
+                    .overlay(Circle().stroke(ringColor, lineWidth: active ? 2.5 : 1.5))
+                    .shadow(color: active ? stage.color.opacity(0.6) : (done ? .neonGreen.opacity(0.3) : .clear), radius: 8)
+
+                Image(systemName: done ? "checkmark" : (active ? stage.icon : "circle"))
+                    .font(.system(size: textSize * 0.3, weight: .bold))
+                    .foregroundColor(done ? .neonGreen : (active ? stage.color : .gray.opacity(0.5)))
+            }
+
+            Text(nodes[index].label)
+                .font(.system(size: textSize * 0.21, weight: .black, design: .monospaced))
+                .foregroundColor(done ? .neonGreen : (active ? stage.color : .gray.opacity(0.5)))
+        }
+        .frame(maxWidth: .infinity)
+        .animation(.spring(response: 0.35, dampingFraction: 0.7), value: activeIndex)
+    }
+
+    @ViewBuilder private func connectorView(index: Int) -> some View {
+        let filled = stage == .confirmed || index < activeIndex
+        RoundedRectangle(cornerRadius: 1)
+            .fill(filled ? Color.neonGreen.opacity(0.7) : Color.white.opacity(0.12))
+            .frame(height: 2)
+            .frame(maxWidth: .infinity)
+            .padding(.bottom, 16)
+            .animation(.easeInOut(duration: 0.3), value: filled)
+    }
+}
+
+// MARK: - Template Management (unchanged behavior, carried over)
 
 struct TemplateManagerView: View {
     @Environment(\.dismiss) var dismiss
@@ -1084,61 +1442,6 @@ struct TemplateRowView: View {
     }
 }
 
-struct DispatchProgressView: View {
-    let stage: DispatchStage
-    let progress: Double
-    let textSize: Double
-
-    var body: some View {
-        VStack(spacing: 10) {
-            GeometryReader { geometry in
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(Color.white.opacity(0.1))
-                        .frame(height: 8)
-
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(
-                            LinearGradient(
-                                colors: [stage.color, stage.color.opacity(0.7)],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .frame(width: geometry.size.width * progress, height: 8)
-                        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: progress)
-                }
-            }
-            .frame(height: 8)
-
-            HStack(spacing: 8) {
-                if #available(iOS 17.0, *) {
-                    Image(systemName: stage.icon)
-                        .font(.system(size: textSize * 0.5, weight: .bold))
-                        .foregroundColor(stage.color)
-                        .symbolEffect(.pulse.byLayer, options: .repeating, value: stage)
-                } else {
-                    Image(systemName: stage.icon)
-                        .font(.system(size: textSize * 0.5, weight: .bold))
-                        .foregroundColor(stage.color)
-                }
-
-                Text(stage.rawValue)
-                    .font(.system(size: textSize * 0.4, weight: .black, design: .monospaced))
-                    .foregroundColor(stage.color)
-
-                Spacer()
-
-                Text("\(Int(progress * 100))%")
-                    .font(.system(size: textSize * 0.35, weight: .bold, design: .monospaced))
-                    .foregroundColor(.gray)
-            }
-        }
-        .padding(14)
-        .glassmorphicBento(glowColor: stage.color)
-    }
-}
-
 struct DispatchToast: View {
     let message: String
     let icon: String
@@ -1202,169 +1505,26 @@ struct DispatchToast: View {
 
 // NOTE: glassmorphicBento() lives in Shared/CyberpunkDesignSystem.swift
 // (single source of truth for the bento tile). Do not redeclare here.
+// NOTE: The old full-screen DispatchModalView / DispatchProgressView were
+// removed in the Dispatch Deck redesign — the inline StagePipelineView above
+// replaces them. Nothing outside this file referenced them.
 
-// MARK: - Dispatch progress modal (3D glassmorphic bento, blurred backdrop, staggered intro)
+// MARK: - Deck Entrance
 
-struct DispatchModalView: View {
-    let stage: DispatchStage
-    let progress: Double
-    let textSize: Double
-    let onDone: () -> Void
-
-    private var glow: Color {
-        switch stage {
-        case .failed: return .neonRed
-        case .confirmed: return .neonGreen
-        default: return .neonCyan
-        }
-    }
-
-    @State private var bg = false        // backdrop blur + glows
-    @State private var card = false      // card 3D entrance
-    @State private var icon = false
-    @State private var title = false
-    @State private var bodyIn = false
-    @State private var action = false
-
-    var body: some View {
-        ZStack {
-            Color.voidBlack
-                .blur(radius: bg ? 0 : 0)
-                .ignoresSafeArea()
-
-            // Soft neon ambient glows
-            RadialGradient(colors: [glow.opacity(bg ? 0.35 : 0), .clear], center: .center, startRadius: 20, endRadius: 420)
-                .ignoresSafeArea()
-
-            // Subtle neon grid
-            NeonGridBackground(lineColor: glow.opacity(0.10), lineSpacing: 34)
-
-            VStack(spacing: 20) {
-                if stage == .failed {
-                    iconView("xmark.octagon.fill", color: .neonRed, bounce: false)
-                        .modifier(IntroStagger(enabled: icon))
-                    textView("SEND FAILED", color: .neonRed)
-                        .modifier(IntroStagger(enabled: title))
-                } else if stage == .confirmed {
-                    iconView("checkmark.circle.fill", color: .neonGreen, bounce: true)
-                        .modifier(IntroStagger(enabled: icon))
-                    textView("MESSAGE SENT", color: .neonGreen)
-                        .modifier(IntroStagger(enabled: title))
-                    bodyView("Resending until read")
-                        .modifier(IntroStagger(enabled: bodyIn))
-                } else {
-                    DispatchProgressView(stage: stage, progress: progress, textSize: textSize)
-                        .modifier(IntroStagger(enabled: icon))
-                }
-
-                if stage == .confirmed || stage == .failed {
-                    Button(action: onDone) {
-                        Text("DONE")
-                            .font(.system(size: textSize * 0.45, weight: .black, design: .monospaced))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, textSize * 0.45)
-                            .background(Color.white.opacity(0.1))
-                            .foregroundColor(.white)
-                            .cornerRadius(14)
-                            .overlay(RoundedRectangle(cornerRadius: 14).stroke(glow.opacity(0.4), lineWidth: 1))
-                    }
-                    .modifier(IntroStagger(enabled: action))
-                }
-            }
-            .padding(24)
-            .background(
-                RoundedRectangle(cornerRadius: 28)
-                    .fill(LinearGradient(colors: [Color.glassLight, Color.glassDark], startPoint: .topLeading, endPoint: .bottomTrailing))
-            )
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 28))
-            .overlay(
-                RoundedRectangle(cornerRadius: 28)
-                    .stroke(LinearGradient(colors: [glow.opacity(0.7), glow.opacity(0.15), .white.opacity(0.25)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1.5)
-            )
-            .shadow(color: glow.opacity(card ? 0.55 : 0), radius: 42, x: 0, y: 0)
-            .shadow(color: .black.opacity(0.55), radius: 28, x: 0, y: 16)
-            .rotation3DEffect(.degrees(card ? 0 : -8), axis: (x: 1, y: 1, z: 0))
-            .rotation3DEffect(.degrees(card ? 0 : 10), axis: (x: 0, y: 1, z: 0))
-            .scaleEffect(card ? 1 : 0.82)
-            .opacity(card ? 1 : 0)
-            .offset(y: card ? 0 : -70)
-        }
-        .onAppear {
-            // Framer-motion-style staged entrance.
-            withAnimation(.spring(response: 0.6, dampingFraction: 0.72)) { bg = true }
-            withAnimation(.spring(response: 0.6, dampingFraction: 0.68).delay(0.10)) { card = true }
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.7).delay(0.22)) { icon = true }
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.7).delay(0.34)) { title = true }
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.7).delay(0.46)) { bodyIn = true }
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.7).delay(0.60)) { action = true }
-        }
-        .onChange(of: stage) { newStage in
-            if newStage == .confirmed || newStage == .failed {
-                withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) { action = true }
-            }
-        }
-    }
-
-    private func iconView(_ systemName: String, color: Color, bounce: Bool) -> some View {
-        Image(systemName: systemName)
-            .font(.system(size: textSize * 1.5, weight: .bold))
-            .foregroundColor(color)
-            .shadow(color: color.opacity(0.8), radius: 18)
-            .shadow(color: color.opacity(0.35), radius: 34)
-            .scaleEffect(bounce ? 1.12 : 1)
-            .animation(bounce ? .spring(response: 0.4, dampingFraction: 0.5).repeatForever(autoreverses: true) : .default, value: bounce)
-    }
-
-    private func textView(_ text: String, color: Color) -> some View {
-        Text(text)
-            .font(.system(size: textSize * 0.6, weight: .black, design: .monospaced))
-            .foregroundColor(.white)
-            .shadow(color: color.opacity(0.6), radius: 10)
-    }
-
-    private func bodyView(_ text: String) -> some View {
-        Text(text)
-            .font(.system(size: textSize * 0.4))
-            .foregroundColor(.gray)
+extension View {
+    /// Staggered tile entrance for the deck. Reads the console's animatedIn
+    /// flags so tiles fly in one after another on first appear.
+    func deckEntrance(index: Int, animatedIn: [Bool]) -> some View {
+        self
+            .opacity(index < animatedIn.count && animatedIn[index] ? 1 : 0)
+            .scaleEffect(index < animatedIn.count && animatedIn[index] ? 1 : 0.92)
+            .offset(y: index < animatedIn.count && animatedIn[index] ? 0 : 34)
     }
 }
 
-/// Applies fly-in, fade-in, scale-up once when `enabled` flips true.
-private struct IntroStagger: ViewModifier {
-    let enabled: Bool
-    func body(content: Content) -> some View {
-        content
-            .opacity(enabled ? 1 : 0)
-            .scaleEffect(enabled ? 1 : 0.8)
-            .offset(y: enabled ? 0 : 26)
-            .animation(.spring(response: 0.5, dampingFraction: 0.7), value: enabled)
-    }
-}
-
-/// Sparse neon grid so the backdrop reads "professional, grid-aligned".
-private struct NeonGridBackground: View {
-    var lineColor: Color
-    var lineSpacing: CGFloat = 34
-
-    var body: some View {
-        GeometryReader { geo in
-            Canvas { ctx, size in
-                var path = Path()
-                var x: CGFloat = 0
-                while x <= size.width {
-                    path.move(to: CGPoint(x: x, y: 0))
-                    path.addLine(to: CGPoint(x: x, y: size.height))
-                    x += lineSpacing
-                }
-                var y: CGFloat = 0
-                while y <= size.height {
-                    path.move(to: CGPoint(x: 0, y: y))
-                    path.addLine(to: CGPoint(x: size.width, y: y))
-                    y += lineSpacing
-                }
-                ctx.stroke(path, with: .color(lineColor), lineWidth: 0.5)
-            }
-        }
-        .allowsHitTesting(false)
-    }
+// MARK: - Beta color bridge
+// The legacy DesignSystem exposed GameBoyPalette.neonAmber; the Dispatch Deck
+// consolidates on the cyberpunk system, so the amber lives here as a peer color.
+extension Color {
+    static let neonAmber = Color(red: 1.0, green: 0.72, blue: 0.05)
 }
