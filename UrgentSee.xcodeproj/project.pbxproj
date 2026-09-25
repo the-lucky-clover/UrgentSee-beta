@@ -42,6 +42,7 @@
 		91EEBB5621CD41E3B3892875 /* DispatchConsoleRedline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37A0C7933C9E47488C917E91 /* DispatchConsoleRedline.swift */; };
 		AB803C5C226E4D6FAA48FBD2 /* DispatchConsoleNukeOps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C9FC63581994CD48DD79B31 /* DispatchConsoleNukeOps.swift */; };
 		6F15B927BBCB4C9F941849CA /* DashboardSkin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD5CCF27CBC543F48E0055BB /* DashboardSkin.swift */; };
+		27E13A68911F4730A26922C4 /* DispatchConsoleVapor.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9F878A7BF1843A4BF953147 /* DispatchConsoleVapor.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -96,6 +97,7 @@
 		37A0C7933C9E47488C917E91 /* DispatchConsoleRedline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DispatchConsoleRedline.swift; sourceTree = "<group>"; };
 		7C9FC63581994CD48DD79B31 /* DispatchConsoleNukeOps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DispatchConsoleNukeOps.swift; sourceTree = "<group>"; };
 		BD5CCF27CBC543F48E0055BB /* DashboardSkin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardSkin.swift; sourceTree = "<group>"; };
+		E9F878A7BF1843A4BF953147 /* DispatchConsoleVapor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DispatchConsoleVapor.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -143,6 +145,7 @@
 				D925054285D94013A7CEC71D /* DispatchConsoleVanilla.swift */,
 				37A0C7933C9E47488C917E91 /* DispatchConsoleRedline.swift */,
 				7C9FC63581994CD48DD79B31 /* DispatchConsoleNukeOps.swift */,
+				E9F878A7BF1843A4BF953147 /* DispatchConsoleVapor.swift */,
 			);
 			name = Core;
 			path = UrgentSee/Core;
@@ -400,6 +403,7 @@
 				B3B36B34273941A98D467AD6 /* DispatchConsoleVanilla.swift in Sources */,
 				91EEBB5621CD41E3B3892875 /* DispatchConsoleRedline.swift in Sources */,
 				AB803C5C226E4D6FAA48FBD2 /* DispatchConsoleNukeOps.swift in Sources */,
+				27E13A68911F4730A26922C4 /* DispatchConsoleVapor.swift in Sources */,
 				6F15B927BBCB4C9F941849CA /* DashboardSkin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

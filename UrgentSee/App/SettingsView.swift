@@ -66,11 +66,14 @@ struct SettingsView: View {
                 Section(header: Text("APPEARANCE")) {
                     Picker("Dashboard Skin", selection: $skinId) {
                         ForEach(DashboardSkin.allCases) { skin in
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(skin.displayName)
-                                Text(skin.tagline)
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
+                            HStack(spacing: 12) {
+                                skin.thumbnail
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(skin.displayName)
+                                    Text(skin.tagline)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
                             }
                             .tag(skin.rawValue)
                         }
