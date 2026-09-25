@@ -488,6 +488,7 @@ struct DispatchConsoleReDux: View {
                     .foregroundColor(.white)
                     .font(.system(size: ts * 0.58, weight: .semibold, design: .rounded))
                     .onChange(of: messageText) { _ in
+                        KeyboardHaptics.keystroke()
                         if messageText.count > maxCharacters {
                             messageText = String(messageText.prefix(maxCharacters))
                         }

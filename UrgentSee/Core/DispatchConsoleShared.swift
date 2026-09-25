@@ -15,3 +15,17 @@ struct MessageTemplate: Identifiable, Codable {
         self.text = text
     }
 }
+
+/// Subtle per-keystroke haptics for message composers. Throttled so fast
+/// typing feels like a keyboard, not a jackhammer. Call from
+/// `.onChange(of: messageText)`.
+enum KeyboardHaptics {
+    private static var lastFire = Date.distantPast
+
+    static func keystroke() {
+        let now = Date()
+        guard now.timeIntervalSince(lastFire) >= 0.06 else { return }
+        lastFire = now
+        Haptics.tap()
+    }
+}

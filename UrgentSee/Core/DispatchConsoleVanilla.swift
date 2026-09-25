@@ -379,6 +379,7 @@ struct DispatchConsoleVanilla: View {
                     .frame(minHeight: 120)
                     .font(.body)
                     .onChange(of: messageText) { _, newValue in
+                        KeyboardHaptics.keystroke()
                         if newValue.count > maxCharacters {
                             messageText = String(newValue.prefix(maxCharacters))
                             Haptics.warning()

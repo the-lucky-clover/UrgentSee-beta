@@ -358,6 +358,7 @@ struct DispatchConsoleNukeOps: View {
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(.white.opacity(0.15), lineWidth: 1))
                     .background(Color.white.opacity(0.03), in: RoundedRectangle(cornerRadius: 10))
                     .onChange(of: messageText) { _, newValue in
+                        KeyboardHaptics.keystroke()
                         if newValue.count > maxCharacters {
                             messageText = String(newValue.prefix(maxCharacters))
                             Haptics.warning()

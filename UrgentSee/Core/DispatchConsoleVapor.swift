@@ -385,6 +385,7 @@ struct DispatchConsoleVapor: View {
                     .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 20))
                     .overlay(RoundedRectangle(cornerRadius: 20).stroke(.white.opacity(0.12), lineWidth: 1))
                     .onChange(of: messageText) { _, newValue in
+                        KeyboardHaptics.keystroke()
                         if newValue.count > maxCharacters {
                             messageText = String(newValue.prefix(maxCharacters))
                             Haptics.warning()

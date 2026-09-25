@@ -423,6 +423,7 @@ struct DispatchConsoleRedline: View {
                     .padding(16)
                     .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 18))
                     .onChange(of: messageText) { _, newValue in
+                        KeyboardHaptics.keystroke()
                         if newValue.count > maxCharacters {
                             messageText = String(newValue.prefix(maxCharacters))
                             Haptics.warning()

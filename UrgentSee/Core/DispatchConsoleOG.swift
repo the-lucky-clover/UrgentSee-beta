@@ -452,6 +452,7 @@ struct DispatchConsoleOG: View {
                     .foregroundColor(.white)
                     .font(.system(size: settings.textSize * 0.6, weight: .bold, design: .rounded))
                     .onChange(of: messageText) { newValue in
+                        KeyboardHaptics.keystroke()
                         let exceedsLimit = newValue.count > maxCharacters
                         if exceedsLimit {
                             let truncated = newValue.prefix(maxCharacters)
