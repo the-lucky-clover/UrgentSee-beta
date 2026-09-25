@@ -20,7 +20,6 @@
 		6078ABEE4EB42A7D497B1976 /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F649A65183D57ADEDC54245 /* DesignSystem.swift */; };
 		6180D285F2DF179773F2F87B /* AccessibilitySettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EF36547E34A3286A7180FEA /* AccessibilitySettings.swift */; };
 		6A6D081D3A1BDB44C95D64C4 /* libUrgentSeeShared.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 39BC8860E6CAF09C71BCA510 /* libUrgentSeeShared.a */; };
-		78D088FF9EE7E237BCF35457 /* UrgentSeeDispatchConsole.swift.bak in Resources */ = {isa = PBXBuildFile; fileRef = 33C24A1C3A5C27A2E2761A15 /* UrgentSeeDispatchConsole.swift.bak */; };
 		8C9724E1417BD0939B4BD4E7 /* UrgentSeeAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29304AD6CD2414C0278CBC30 /* UrgentSeeAttributes.swift */; };
 		99436D7EF43F4AD3CF7E71C4 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 920020BA5DFCB06267D1C921 /* Assets.xcassets */; };
 		A3D563F3385FAE0B6286A12E /* AuthSettingsView.swift.bak in Resources */ = {isa = PBXBuildFile; fileRef = AB2BE15FA6D557DB380E4852 /* AuthSettingsView.swift.bak */; };
@@ -36,6 +35,13 @@
 		E5620F15A06391DB8A5CB10B /* ReverseAckService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B281B986529B7C8B108FA7F8 /* ReverseAckService.swift */; };
 		E9CDC70F5E23A8B118DE03EE /* SharedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C46637A54352B74F5AB8DEB8 /* SharedModels.swift */; };
 		EF47D5E1F95FDA2942821124 /* TrustCircleManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF870A86A01CFDBE5F0FED9E /* TrustCircleManager.swift */; };
+		0660ED3EBB3F44EF8B42867D /* DispatchConsoleShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBE8FB5D3D334D599E570B2C /* DispatchConsoleShared.swift */; };
+		132A42E4C90D49EBA00707AB /* DispatchConsoleOG.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AA89FA7238846C6B17B5C48 /* DispatchConsoleOG.swift */; };
+		7E85B9B5334E4809B24E7460 /* DispatchConsoleReDux.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87E700839C4E47E99BCC08C3 /* DispatchConsoleReDux.swift */; };
+		B3B36B34273941A98D467AD6 /* DispatchConsoleVanilla.swift in Sources */ = {isa = PBXBuildFile; fileRef = D925054285D94013A7CEC71D /* DispatchConsoleVanilla.swift */; };
+		91EEBB5621CD41E3B3892875 /* DispatchConsoleRedline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37A0C7933C9E47488C917E91 /* DispatchConsoleRedline.swift */; };
+		AB803C5C226E4D6FAA48FBD2 /* DispatchConsoleNukeOps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C9FC63581994CD48DD79B31 /* DispatchConsoleNukeOps.swift */; };
+		6F15B927BBCB4C9F941849CA /* DashboardSkin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD5CCF27CBC543F48E0055BB /* DashboardSkin.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -59,7 +65,6 @@
 		0F353AAA0A318185B77A6036 /* UrgentSeeDispatchConsole.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UrgentSeeDispatchConsole.swift; sourceTree = "<group>"; };
 		0F649A65183D57ADEDC54245 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
 		29304AD6CD2414C0278CBC30 /* UrgentSeeAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UrgentSeeAttributes.swift; sourceTree = "<group>"; };
-		33C24A1C3A5C27A2E2761A15 /* UrgentSeeDispatchConsole.swift.bak */ = {isa = PBXFileReference; path = UrgentSeeDispatchConsole.swift.bak; sourceTree = "<group>"; };
 		39BC8860E6CAF09C71BCA510 /* libUrgentSeeShared.a */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = archive.ar; path = libUrgentSeeShared.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		41299757B581BBC84A65DDCB /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		42521DBCA5430022EECEEE7A /* AuthSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthSettingsView.swift; sourceTree = "<group>"; };
@@ -84,6 +89,13 @@
 		EB348EA347556E11E3CCF828 /* CyberpunkDesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CyberpunkDesignSystem.swift; sourceTree = "<group>"; };
 		FA9937EA1E048FA4787965F9 /* UrgentSeeLiveActivityExtension.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = UrgentSeeLiveActivityExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		FF870A86A01CFDBE5F0FED9E /* TrustCircleManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustCircleManager.swift; sourceTree = "<group>"; };
+		CBE8FB5D3D334D599E570B2C /* DispatchConsoleShared.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DispatchConsoleShared.swift; sourceTree = "<group>"; };
+		2AA89FA7238846C6B17B5C48 /* DispatchConsoleOG.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DispatchConsoleOG.swift; sourceTree = "<group>"; };
+		87E700839C4E47E99BCC08C3 /* DispatchConsoleReDux.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DispatchConsoleReDux.swift; sourceTree = "<group>"; };
+		D925054285D94013A7CEC71D /* DispatchConsoleVanilla.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DispatchConsoleVanilla.swift; sourceTree = "<group>"; };
+		37A0C7933C9E47488C917E91 /* DispatchConsoleRedline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DispatchConsoleRedline.swift; sourceTree = "<group>"; };
+		7C9FC63581994CD48DD79B31 /* DispatchConsoleNukeOps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DispatchConsoleNukeOps.swift; sourceTree = "<group>"; };
+		BD5CCF27CBC543F48E0055BB /* DashboardSkin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardSkin.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -125,7 +137,12 @@
 				B281B986529B7C8B108FA7F8 /* ReverseAckService.swift */,
 				FF870A86A01CFDBE5F0FED9E /* TrustCircleManager.swift */,
 				0F353AAA0A318185B77A6036 /* UrgentSeeDispatchConsole.swift */,
-				33C24A1C3A5C27A2E2761A15 /* UrgentSeeDispatchConsole.swift.bak */,
+				CBE8FB5D3D334D599E570B2C /* DispatchConsoleShared.swift */,
+				2AA89FA7238846C6B17B5C48 /* DispatchConsoleOG.swift */,
+				87E700839C4E47E99BCC08C3 /* DispatchConsoleReDux.swift */,
+				D925054285D94013A7CEC71D /* DispatchConsoleVanilla.swift */,
+				37A0C7933C9E47488C917E91 /* DispatchConsoleRedline.swift */,
+				7C9FC63581994CD48DD79B31 /* DispatchConsoleNukeOps.swift */,
 			);
 			name = Core;
 			path = UrgentSee/Core;
@@ -139,6 +156,7 @@
 				0F649A65183D57ADEDC54245 /* DesignSystem.swift */,
 				D6A787EDCDE26D1BF3CA99D8 /* Info.plist */,
 				C46637A54352B74F5AB8DEB8 /* SharedModels.swift */,
+				BD5CCF27CBC543F48E0055BB /* DashboardSkin.swift */,
 			);
 			name = Shared;
 			path = UrgentSee/Shared;
@@ -332,7 +350,6 @@
 			files = (
 				99436D7EF43F4AD3CF7E71C4 /* Assets.xcassets in Resources */,
 				A3D563F3385FAE0B6286A12E /* AuthSettingsView.swift.bak in Resources */,
-				78D088FF9EE7E237BCF35457 /* UrgentSeeDispatchConsole.swift.bak in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -377,6 +394,13 @@
 				EF47D5E1F95FDA2942821124 /* TrustCircleManager.swift in Sources */,
 				4BA6EED8EB74D6D64E6DE737 /* UrgentSeeApp.swift in Sources */,
 				463B264EC6D55461C93F082E /* UrgentSeeDispatchConsole.swift in Sources */,
+				0660ED3EBB3F44EF8B42867D /* DispatchConsoleShared.swift in Sources */,
+				132A42E4C90D49EBA00707AB /* DispatchConsoleOG.swift in Sources */,
+				7E85B9B5334E4809B24E7460 /* DispatchConsoleReDux.swift in Sources */,
+				B3B36B34273941A98D467AD6 /* DispatchConsoleVanilla.swift in Sources */,
+				91EEBB5621CD41E3B3892875 /* DispatchConsoleRedline.swift in Sources */,
+				AB803C5C226E4D6FAA48FBD2 /* DispatchConsoleNukeOps.swift in Sources */,
+				6F15B927BBCB4C9F941849CA /* DashboardSkin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

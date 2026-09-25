@@ -10,6 +10,7 @@ struct SettingsView: View {
     @State private var jwtToken = ""
     @State private var userId = ""
     @State private var showingAuthSetup = false
+    @AppStorage("dashboardSkin") private var skinId: String = DashboardSkin.redux.rawValue
     
     var body: some View {
         NavigationView {
@@ -60,6 +61,24 @@ struct SettingsView: View {
                 Section(header: Text("COLORS")) {
                     Toggle("High Contrast Mode", isOn: $settings.highContrast)
                         .foregroundColor(.primary)
+                }
+
+                Section(header: Text("APPEARANCE")) {
+                    Picker("Dashboard Skin", selection: $skinId) {
+                        ForEach(DashboardSkin.allCases) { skin in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(skin.displayName)
+                                Text(skin.tagline)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            .tag(skin.rawValue)
+                        }
+                    }
+                    .foregroundColor(.primary)
+                    Text("Applies instantly to the Dispatch tab.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
                 
                 Section {
