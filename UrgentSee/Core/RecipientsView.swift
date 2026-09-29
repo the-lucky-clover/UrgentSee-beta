@@ -35,6 +35,7 @@ struct RecipientsView: View {
                     VStack(spacing: 16) {
                         // Header
                         HStack {
+                            PhoneAppIcon(size: settings.textSize * 0.75)
                             VStack(alignment: .leading, spacing: 4) {
                                 HStack(spacing: 6) {
                                     Image(systemName: "person.2.circle.fill")

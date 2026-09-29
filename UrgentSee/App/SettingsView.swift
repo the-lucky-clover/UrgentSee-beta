@@ -97,6 +97,11 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("UrgentSee Settings")
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    PhoneAppIcon(size: 28)
+                }
+            }
             .sheet(isPresented: $showingInviteSheet) {
                 InviteSheet(isPresented: $showingInviteSheet, inviteId: $inviteId)
             }

@@ -229,6 +229,9 @@ struct DispatchConsoleVanilla: View {
             .listStyle(.insetGrouped)
             .navigationTitle("Dispatch")
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    PhoneAppIcon(size: 28)
+                }
                 ToolbarItem(placement: .principal) {
                     HStack(spacing: 6) {
                         Image(systemName: statusLine.icon)

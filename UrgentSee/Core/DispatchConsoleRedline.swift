@@ -260,6 +260,11 @@ struct DispatchConsoleRedline: View {
         }
         .navigationTitle("Dispatch")
         .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                PhoneAppIcon(size: 28)
+            }
+        }
         .sheet(isPresented: $showTemplateManager) {
             RedlineTemplateManagerSheet(
                 templates: messageTemplates,

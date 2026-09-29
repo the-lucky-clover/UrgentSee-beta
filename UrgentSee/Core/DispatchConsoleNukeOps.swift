@@ -201,6 +201,11 @@ struct DispatchConsoleNukeOps: View {
         }
         .navigationTitle("SILO")
         .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                PhoneAppIcon(size: 28)
+            }
+        }
         .preferredColorScheme(.dark)
         .sheet(isPresented: $showTemplateManager) {
             NukeOpsTemplateManager(templates: messageTemplates, onSave: saveTemplates(_:), onAdd: { showAddTemplate = true })

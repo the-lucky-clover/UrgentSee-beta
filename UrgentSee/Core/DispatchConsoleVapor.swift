@@ -212,6 +212,11 @@ struct DispatchConsoleVapor: View {
         }
         .navigationTitle("Vapor")
         .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                PhoneAppIcon(size: 28)
+            }
+        }
         .preferredColorScheme(.dark)
         .sheet(isPresented: $showTemplateManager) {
             VaporTemplateManager(templates: messageTemplates, onSave: saveTemplates(_:), onAdd: { showAddTemplate = true })

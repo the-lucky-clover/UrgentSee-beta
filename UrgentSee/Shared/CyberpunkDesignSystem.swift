@@ -107,30 +107,23 @@ struct IntermittentShimmerModifier: ViewModifier {
     }
 }
 
-// MARK: - Red phone app icon (replaces the old suitcase glyph)
+// MARK: - Red rotary phone app icon (the real App Store artwork, on every screen)
 
 struct PhoneAppIcon: View {
     var size: CGFloat = 32
 
     var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [Color(red: 0.95, green: 0.15, blue: 0.2), Color(red: 0.55, green: 0.05, blue: 0.12)],
-                        startPoint: .topLeading, endPoint: .bottomTrailing
-                    )
-                )
-                .frame(width: size, height: size)
-                .shadow(color: Color.red.opacity(0.55), radius: size * 0.28, x: 0, y: 0)
-                .overlay(
-                    RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
-                        .stroke(Color.white.opacity(0.35), lineWidth: 1)
-                )
-            Image(systemName: "phone.fill")
-                .font(.system(size: size * 0.5, weight: .bold))
-                .foregroundColor(.white)
-        }
+        Image("AppIconPhoto")
+            .resizable()
+            .aspectRatio(contentMode: .fill)
+            .frame(width: size, height: size)
+            .clipShape(RoundedRectangle(cornerRadius: size * 0.24, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
+                    .stroke(Color.white.opacity(0.25), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.4), radius: size * 0.18, x: 0, y: 2)
+            .accessibilityLabel("UrgentSee app icon")
     }
 }
 
